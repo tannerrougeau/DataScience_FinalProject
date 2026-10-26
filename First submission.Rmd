@@ -1,0 +1,169 @@
+---
+title: "Final Project_Data Science"
+author: "Tanner Rougeau"
+date: "2026-10-25"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load packages and data
+```{r}
+# load tidyverse for data wrangling and ggplot2
+library(tidyverse)
+# read the covariate and gene expression data in its original state
+covar <- read.csv("C:/Users/tanne/OneDrive/GradSchool/Foundations of Data Science/Project/GSE85307_covar-1.csv")
+expr <- read.csv("C:/Users/tanne/OneDrive/GradSchool/Foundations of Data Science/Project/GSE85307_geneExpression.csv")
+# read the probe-to-gene-name linker file
+genes <- read.csv("C:/Users/tanne/OneDrive/GradSchool/Foundations of Data Science/Project/GSE85307_geneNames.csv")
+```
+
+## Inspect Covariance data
+```{r}
+# show variable names, types, and first values in the covariate file
+str(covar)
+# show summary statistics to spot missing codes or odd values
+summary(covar)
+```
+
+## Inspect gene expression data
+```{r}
+# number of rows (probes) and columns (samples)
+dim(expr)
+# first 5 column names to see how samples are labeled
+names(expr)[1:5]
+```
+
+## Inspect gene name linker file
+```{r}
+# structure of the probe-to-gene linker file
+str(genes)
+```
+
+### Clean covariance data
+```{r}
+# remove the label/text before each value in columns 3-10
+covar[3:10] <- lapply(covar[3:10], function(x) sub(".*: ", "", x))
+
+# convert the continuous covariates from text to numbers
+covar$mat_age_yrs <- as.numeric(covar$mat_age_yrs)
+covar$delivery_gestAge_wks <- as.numeric(covar$delivery_gestAge_wks)
+covar$sampleCollection_gestAge_wks <- as.numeric(covar$sampleCollection_gestAge_wks)
+covar$mat_BMI <- as.numeric(covar$mat_BMI)
+covar$mat_vitD <- as.numeric(covar$mat_vitD)
+
+# convert the categorical covariates to factors with readable labels
+covar$preg_preeclampsia <- factor(covar$preg_preeclampsia, levels = c("Normal", "Preeclampsia"))
+covar$mat_asthma <- factor(covar$mat_asthma, levels = c(0, 1), labels = c("Healthy", "Asthma"))
+covar$batch_Microarray <- factor(covar$batch_Microarray)
+
+# confirm after cleaning
+summary(covar)
+```
+
+### Verify sample matching
+```{r}
+# check that expression sample columns have  matching geoID in the covariate data
+all(names(expr)[-1] %in% covar$geoID)
+
+# check that covariate geoIDs have matching expression column
+all(covar$geoID %in% names(expr)[-1])
+
+# check how many expression probes appear in the linker file
+sum(expr$X %in% genes$PROBEID)
+
+# check whether any probe IDs are repeated in the linker file
+sum(duplicated(genes$PROBEID))
+```
+
+
+## Merge names with expression data and create analysis dataset
+```{r}
+# attach gene names to the expression data by matching probe IDs
+expr_named <- merge(genes, expr, by.x = "PROBEID", by.y = "X")
+
+# check that many rows remain and for duplicate gene names
+nrow(expr_named)
+sum(duplicated(expr_named$GENE))
+
+# seshape to long format: one row per gene per sample
+expr_long <- pivot_longer(expr_named, cols = -c(PROBEID, GENE), names_to = "geoID", values_to = "expression")
+
+# join covariates onto each sample by geoID
+dat <- left_join(expr_long, covar, by = "geoID")
+
+# confirm size (78,500 rows)
+dim(dat)
+```
+
+## Define categorical variables and find candidate genes
+```{r}
+# create vitamin D status, standard deficiency cutoff of 20 ng/mL
+dat$vitD_status <- factor(ifelse(dat$mat_vitD < 20, "Deficient", "Sufficient"), levels = c("Sufficient", "Deficient"))
+
+# create obesity status,standard BMI cutoff of 30 kg/m2
+dat$obese <- factor(ifelse(dat$mat_BMI >= 30, "Obese", "Not obese"), levels = c("Not obese", "Obese"))
+
+# check which known preeclampsia-related genes are on 500-probe array
+intersect(c("FLT1", "ENG", "LEP", "PGF", "VEGFA", "PAPPA2", "INHBA", "HTRA1"), expr_named$GENE)
+```
+
+## Rank genes by pre-eclampsia difference
+```{r}
+# for each gene, compare mean expression between preeclampsia and normal pregnancies
+gene_rank <- dat %>%
+  group_by(GENE) %>%
+  summarise(mean_diff = mean(expression[preg_preeclampsia == "Preeclampsia"]) - mean(expression[preg_preeclampsia == "Normal"]),
+            p_value = t.test(expression ~ preg_preeclampsia)$p.value) %>%
+  arrange(p_value)
+
+# show 10 genes with strongest difference
+head(gene_rank, 10)
+
+# show the range of expression values across genes and samples
+summary(dat$expression)
+```
+
+## Gene of interest
+```{r}
+# keep only rows for chosen gene
+gene_dat <- filter(dat, GENE == "RUNDC3A")
+# confirm one row per sample
+nrow(gene_dat)
+
+# plot the distribution of RUNDC3A expression across all samples
+ggplot(gene_dat, aes(x = expression)) +
+  geom_histogram(bins = 20, fill = "steelblue", color = "white") +
+  labs(x = "RUNDC3A Expression (log2)", y = "Number of Samples",
+       title = "Distribution of RUNDC3A Expression") +
+  theme_classic(base_size = 13)
+```
+
+## BMI vs Gene Expression
+```{r}
+# Plot RUNDC3A expression against maternal BMI with a fitted regression line
+ggplot(gene_dat, aes(x = mat_BMI, y = expression)) +
+  geom_point(color = "steelblue", alpha = 0.7, size = 2) +
+  geom_smooth(method = "lm", formula = y ~ x, se = TRUE, color = "black") +
+  labs(x = "Maternal BMI (kg/m²)", y = "RUNDC3A Expression (log2)",
+       title = "RUNDC3A Expression by Maternal BMI") +
+  theme_classic(base_size = 13)
+```
+
+## Preeclampsia and Vit D status
+```{r}
+# plot RUNDC3A expression by preeclampsia status, split by vitamin D status
+ggplot(gene_dat, aes(x = preg_preeclampsia, y = expression, fill = vitD_status)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("Sufficient" = "#E69F00", "Deficient" = "#56B4E9")) +
+  labs(x = "Pregnancy Outcome", y = "RUNDC3A Expression (log2)",
+       fill = "Vitamin D Status", title = "RUNDC3A Expression by Preeclampsia and Vitamin D Status") +
+  theme_classic(base_size = 13) +
+  theme(legend.position = "bottom")
+```
+
+##
