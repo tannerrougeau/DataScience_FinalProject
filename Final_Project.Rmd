@@ -406,3 +406,37 @@ ggsave('beeswarm.png', myBees, width = 10, height = 6)
 # print R and package versions for the Methods section
 sessionInfo()
 ```
+## Generate package references
+```{r}
+# write BibTex entries for R and packages used into .bib
+knitr::write_bib(c('base', 'tidyverse', 'ggplot2','ggpubr','pheatmap','ggbeeswarm','knitr'), file = 'packages.bib')
+```
+
+
+## Combine png's into one panel (Gene 1)
+```{r}
+# Rebuild the RUNDC3A plots as one A/B/C panel for the write-up
+library(ggpubr)
+gene_dat <- dat[dat$GENE == 'RUNDC3A', ]
+geneLabel <- bquote(italic('RUNDC3A') ~ 'Expression (log2)')
+
+set.seed(321)
+p1 <- ggplot(gene_dat, aes(x = expression)) +
+  geom_histogram(bins = 20, fill = 'steelblue', color = 'white') +
+  labs(x = geneLabel, y = 'Number of Samples') + theme_classic(base_size = 16)
+p2 <- ggplot(gene_dat, aes(x = mat_BMI, y = expression)) +
+  geom_point(color = 'steelblue', alpha = 0.7, size = 2) +
+  geom_smooth(method = 'lm', formula = y ~ x, color = 'black') +
+  labs(x = myLabels[['mat_BMI']], y = geneLabel) + theme_classic(base_size = 16)
+p3 <- ggplot(gene_dat, aes(x = preg_preeclampsia, y = expression, fill = vitD_status)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.5, size = 1.5) +
+  scale_fill_manual(values = c('#E69F00','#56B4E9')) +
+  labs(x = myLabels[['preg_preeclampsia']], y = geneLabel, fill = myLabels[['vitD_status']]) +
+  theme_classic(base_size = 16) + theme(legend.position = 'bottom')
+
+# Combine into one figure with A, B, C labels and save it
+rundc3aPanel <- ggarrange(p1, p2, p3, labels = c('A','B','C'), ncol = 3)
+rundc3aPanel
+ggsave('RUNDC3A_panel.png', rundc3aPanel, width = 18, height = 6)
+```
