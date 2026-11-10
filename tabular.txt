@@ -1,0 +1,10 @@
+\begin{tabular}{llll}
+\toprule
+  & Normal (n = 110) & Preeclampsia (n = 47) & Overall (n = 157)\\
+\midrule
+Maternal age (years), mean (SD) & 26.63 (5.08) & 25.78 (4.95) & 26.38 (5.04)\\
+Maternal BMI (kg/m$^2$), median [IQR] & 26.54 [22.35, 30.97] & 31.24 [24.62, 36.41] & 27.33 [22.9, 33.27]\\
+Gestational age at delivery (weeks), median [IQR] & 39.29 [38.57, 40] & 39.14 [36.93, 40.07] & 39.29 [38.14, 40]\\
+Vitamin D status, n (%) & Sufficient: 58 (52.7), Deficient: 52 (47.3) & Sufficient: 21 (44.7), Deficient: 26 (55.3) & Sufficient: 79 (50.3), Deficient: 78 (49.7)\\
+\bottomrule
+\end{tabular}
